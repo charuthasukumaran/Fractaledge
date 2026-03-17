@@ -1,0 +1,12 @@
+# Fractal Stock Analyzer — Dependencies
+fastapi
+uvicorn
+numpy
+yfinance
+anthropic
+google-generativeai
+# Angel One SmartAPI (real-time data)
+smartapi-python
+pyotp
+# PostgreSQL (production database)
+psycopg2-binary
