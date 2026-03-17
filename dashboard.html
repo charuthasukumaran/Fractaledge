@@ -1410,19 +1410,11 @@ function analyzeStock() {
   fetch(API + '/analyze/' + encodeURIComponent(currentSymbol), {method:'POST', headers: getAuthHeaders()})
     .then(r => { if (r.status === 401) { alert('Login required to analyze stocks.'); throw new Error('Unauthorized'); } return r.json(); })
     .then(data => {
-      btn.disabled = false;
-      btn.classList.remove('loading');
-      if (data.status === 'ok') {
-        btn.textContent = 'Done!';
-        if (data.info && data.info.price) {
-          document.getElementById('currentPrice').textContent = data.info.price.toFixed(2);
-        }
-        setTimeout(() => { btn.textContent = 'Analyze'; }, 2000);
-        loadAll();
-      } else if (data.status === 'already_running') {
-        btn.textContent = 'Running...';
-        setTimeout(() => { btn.textContent = 'Analyze'; }, 2000);
+      if (data.status === 'started' || data.status === 'already_running') {
+        pollAnalysisStatus(currentSymbol);
       } else {
+        btn.disabled = false;
+        btn.classList.remove('loading');
         btn.textContent = 'Error';
         setTimeout(() => { btn.textContent = 'Analyze'; }, 3000);
       }
@@ -1433,6 +1425,30 @@ function analyzeStock() {
       btn.textContent = 'Error';
       setTimeout(() => { btn.textContent = 'Analyze'; }, 3000);
     });
+}
+
+function pollAnalysisStatus(symbol) {
+  const btn = document.getElementById('analyzeBtn');
+  const poll = setInterval(async () => {
+    try {
+      const r = await fetch(API + '/analyze/status/' + encodeURIComponent(symbol));
+      const d = await r.json();
+      if (d.status === 'done') {
+        clearInterval(poll);
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        btn.textContent = 'Done!';
+        setTimeout(() => { btn.textContent = 'Analyze'; }, 2000);
+        loadAll();
+      } else if (d.status === 'error') {
+        clearInterval(poll);
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        btn.textContent = 'Error';
+        setTimeout(() => { btn.textContent = 'Analyze'; }, 3000);
+      }
+    } catch(e) {}
+  }, 3000);
 }
 
 // Close dropdown when clicking outside
@@ -2782,14 +2798,27 @@ async function triggerAutoRefresh() {
     const resp = await fetch(API + '/analyze/' + encodeURIComponent(currentSymbol), {method:'POST', headers: getAuthHeaders()});
     if (resp.status === 401) { alert('Login required to analyze stocks.'); return; }
     const data = await resp.json();
-    if (data.status === 'ok') {
-      if (data.info && data.info.price) {
-        document.getElementById('currentPrice').textContent = data.info.price.toFixed(2);
-      }
-      statusEl.innerHTML = '<span style="color:var(--green)">✓ Updated at ' + new Date().toLocaleTimeString() + '</span>';
-      await loadAll();
-    } else if (data.status === 'already_running') {
-      statusEl.textContent = 'Analysis already running...';
+    if (data.status === 'started' || data.status === 'already_running') {
+      statusEl.textContent = 'Analysis running...';
+      // Poll until done
+      const sym = currentSymbol;
+      const poll = setInterval(async () => {
+        try {
+          const r = await fetch(API + '/analyze/status/' + encodeURIComponent(sym));
+          const d = await r.json();
+          if (d.status === 'done') {
+            clearInterval(poll);
+            statusEl.innerHTML = '<span style="color:var(--green)">✓ Updated at ' + new Date().toLocaleTimeString() + '</span>';
+            await loadAll();
+            isAutoRefreshing = false;
+          } else if (d.status === 'error') {
+            clearInterval(poll);
+            statusEl.innerHTML = '<span style="color:var(--amber)">⚠ Analysis failed</span>';
+            isAutoRefreshing = false;
+          }
+        } catch(e) {}
+      }, 3000);
+      return;
     } else {
       statusEl.innerHTML = '<span style="color:var(--amber)">⚠ ' + (data.detail || 'Update failed') + '</span>';
     }

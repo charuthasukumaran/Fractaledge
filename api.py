@@ -165,17 +165,8 @@ def _compute_full_signal(all_candles, close_prices, secondary_prices, window, ti
     return signal
 
 
-@app.post("/analyze/{symbol:path}")
-def analyze_stock(symbol: str, source: str = Query(None), _=Depends(require_auth)):
-    """
-    Fetch data and run the full fractal analysis pipeline for the given stock symbol.
-    Computes multiple historical signals over a sliding window so that
-    stress/coupling/ensemble graphs have enough data points to render.
-    """
-    if symbol in _analysis_status and _analysis_status[symbol] == "running":
-        return {"status": "already_running", "symbol": symbol, "message": "Analysis already in progress"}
-
-    _analysis_status[symbol] = "running"
+def _run_analysis_bg(symbol: str, use_source: str):
+    """Background worker for heavy analysis computation."""
     try:
         from data_client import MarketDataClient
         from database import init_db, upsert_candles, insert_signal
@@ -184,18 +175,15 @@ def analyze_stock(symbol: str, source: str = Query(None), _=Depends(require_auth
 
         init_db()
 
-        # Determine data source
-        use_source = source or _current_data_source
-
         # Step 1: Fetch candles from selected data source
         if use_source == "angelone":
             from angelone_client import AngelOneDataClient, get_api_client, is_angel_symbol, is_logged_in
             if not is_logged_in():
                 _analysis_status[symbol] = "error"
-                raise HTTPException(status_code=503, detail="Angel One not logged in. Click 'Connect' first.")
+                return
             if not is_angel_symbol(symbol):
                 _analysis_status[symbol] = "error"
-                raise HTTPException(status_code=400, detail=f"Symbol '{symbol}' not available on Angel One. Use Yahoo Finance instead.")
+                return
             client = AngelOneDataClient(symbol=symbol, api_client=get_api_client())
         else:
             client = MarketDataClient(symbol=symbol)
@@ -204,8 +192,7 @@ def analyze_stock(symbol: str, source: str = Query(None), _=Depends(require_auth
 
         if not candles:
             _analysis_status[symbol] = "error"
-            source_name = "Angel One" if use_source == "angelone" else "Yahoo Finance"
-            raise HTTPException(status_code=404, detail=f"No data found for {symbol} on {source_name}")
+            return
 
         upsert_candles(candles, symbol=symbol)
         logger.info(f"Analyze {symbol}: fetched {len(candles)} candles")
@@ -222,19 +209,15 @@ def analyze_stock(symbol: str, source: str = Query(None), _=Depends(require_auth
 
         if len(all_candles) < config.mfdfa.min_bars:
             _analysis_status[symbol] = "error"
-            raise HTTPException(
-                status_code=400,
-                detail=f"Not enough data for {symbol}: got {len(all_candles)} bars, need {config.mfdfa.min_bars}"
-            )
+            return
 
         all_close = np.array([c["close"] for c in all_candles])
         window = config.mfdfa.window_size
         total_bars = len(all_close)
 
-        # Compute signals over sliding windows (step=50 bars = ~4 hours)
-        # This generates enough data points for the graphs
-        step = 50
-        start_idx = min(window, total_bars)  # start from first full window or all data
+        # Compute signals over sliding windows (step=200 bars = ~16 hours)
+        step = 200
+        start_idx = min(window, total_bars)
         computed = 0
         last_signal = None
 
@@ -243,7 +226,6 @@ def analyze_stock(symbol: str, source: str = Query(None), _=Depends(require_auth
             candle_window = all_candles[max(0, i - window):i]
             ts = all_candles[i - 1]["timestamp"]
 
-            # Secondary prices window
             sec_window = None
             if all_secondary_prices is not None:
                 sec_end = min(i, len(all_secondary_prices))
@@ -261,7 +243,7 @@ def analyze_stock(symbol: str, source: str = Query(None), _=Depends(require_auth
             except Exception as e:
                 logger.warning(f"Analyze {symbol} window @{ts}: {e}")
 
-        # Ensure the very last bar is always computed (even if not on step boundary)
+        # Ensure the very last bar is always computed
         if total_bars > start_idx and (total_bars - start_idx) % step != 0:
             window_close = all_close[max(0, total_bars - window):total_bars]
             candle_window = all_candles[max(0, total_bars - window):total_bars]
@@ -286,33 +268,29 @@ def analyze_stock(symbol: str, source: str = Query(None), _=Depends(require_auth
 
         if not last_signal:
             _analysis_status[symbol] = "error"
-            raise HTTPException(status_code=500, detail=f"Failed to compute any signals for {symbol}")
-
-        # Get stock info
-        info = client.get_stock_info()
+            return
 
         _analysis_status[symbol] = "done"
         logger.info(f"Analyze {symbol}: DONE - {computed} signals computed, latest={last_signal['regime_label']} (ensemble={last_signal['ensemble_score']:.3f})")
 
-        return {
-            "status": "ok",
-            "symbol": symbol,
-            "name": info.get("name", symbol),
-            "info": info,
-            "regime_label": last_signal["regime_label"],
-            "ensemble_score": last_signal["ensemble_score"],
-            "hurst": last_signal["hurst_exponent"],
-            "spectral_width": last_signal["spectral_width"],
-            "candles_count": len(all_candles),
-            "signals_computed": computed,
-        }
-
-    except HTTPException:
-        raise
     except Exception as e:
         _analysis_status[symbol] = "error"
         logger.error(f"Analyze {symbol} error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/analyze/{symbol:path}")
+def analyze_stock(symbol: str, source: str = Query(None), _=Depends(require_auth)):
+    """Kick off analysis in background thread. Returns immediately."""
+    import threading
+
+    if _analysis_status.get(symbol) == "running":
+        return {"status": "already_running", "symbol": symbol}
+
+    _analysis_status[symbol] = "running"
+    use_source = source or _current_data_source
+    t = threading.Thread(target=_run_analysis_bg, args=(symbol, use_source), daemon=True)
+    t.start()
+    return {"status": "started", "symbol": symbol, "message": "Analysis running in background. Poll /analyze/status/{symbol} for progress."}
 
 
 @app.get("/analyze/status/{symbol:path}")
