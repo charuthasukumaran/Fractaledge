@@ -203,9 +203,9 @@ def _run_analysis_bg(symbol: str, use_source: str):
         if sec_candles and len(sec_candles) >= config.mfdfa.min_bars:
             all_secondary_prices = np.array([c["close"] for c in sec_candles])
 
-        # Step 3: Load all candles from DB and compute multiple historical signals
+        # Step 3: Load candles from DB and compute one signal at the latest point
         from database import get_candles as db_get_candles
-        all_candles = db_get_candles(limit=5000, symbol=symbol)
+        all_candles = db_get_candles(limit=config.mfdfa.window_size, symbol=symbol)
 
         if len(all_candles) < config.mfdfa.min_bars:
             _analysis_status[symbol] = "error"
@@ -213,65 +213,24 @@ def _run_analysis_bg(symbol: str, use_source: str):
 
         all_close = np.array([c["close"] for c in all_candles])
         window = config.mfdfa.window_size
-        total_bars = len(all_close)
+        ts = all_candles[-1]["timestamp"]
 
-        # Compute signals over sliding windows (step=200 bars = ~16 hours)
-        step = 200
-        start_idx = min(window, total_bars)
-        computed = 0
-        last_signal = None
+        sec_window = None
+        if all_secondary_prices is not None:
+            sec_end = min(len(all_close), len(all_secondary_prices))
+            if sec_end >= config.mfdfa.min_bars:
+                sec_window = all_secondary_prices[-sec_end:]
 
-        for i in range(start_idx, total_bars + 1, step):
-            window_close = all_close[max(0, i - window):i]
-            candle_window = all_candles[max(0, i - window):i]
-            ts = all_candles[i - 1]["timestamp"]
-
-            sec_window = None
-            if all_secondary_prices is not None:
-                sec_end = min(i, len(all_secondary_prices))
-                sec_start = max(0, sec_end - window)
-                if sec_end > sec_start and (sec_end - sec_start) >= config.mfdfa.min_bars:
-                    sec_window = all_secondary_prices[sec_start:sec_end]
-
-            try:
-                signal = _compute_full_signal(
-                    candle_window, window_close, sec_window, window, ts
-                )
-                insert_signal(signal, symbol=symbol)
-                computed += 1
-                last_signal = signal
-            except Exception as e:
-                logger.warning(f"Analyze {symbol} window @{ts}: {e}")
-
-        # Ensure the very last bar is always computed
-        if total_bars > start_idx and (total_bars - start_idx) % step != 0:
-            window_close = all_close[max(0, total_bars - window):total_bars]
-            candle_window = all_candles[max(0, total_bars - window):total_bars]
-            ts = all_candles[-1]["timestamp"]
-
-            sec_window = None
-            if all_secondary_prices is not None:
-                sec_end = min(total_bars, len(all_secondary_prices))
-                sec_start = max(0, sec_end - window)
-                if sec_end > sec_start and (sec_end - sec_start) >= config.mfdfa.min_bars:
-                    sec_window = all_secondary_prices[sec_start:sec_end]
-
-            try:
-                signal = _compute_full_signal(
-                    candle_window, window_close, sec_window, window, ts
-                )
-                insert_signal(signal, symbol=symbol)
-                computed += 1
-                last_signal = signal
-            except Exception as e:
-                logger.warning(f"Analyze {symbol} final window: {e}")
-
-        if not last_signal:
+        try:
+            signal = _compute_full_signal(all_candles, all_close, sec_window, window, ts)
+            insert_signal(signal, symbol=symbol)
+            logger.info(f"Analyze {symbol}: DONE - {signal['regime_label']} (ensemble={signal['ensemble_score']:.3f})")
+        except Exception as e:
+            logger.error(f"Analyze {symbol} signal error: {e}", exc_info=True)
             _analysis_status[symbol] = "error"
             return
 
         _analysis_status[symbol] = "done"
-        logger.info(f"Analyze {symbol}: DONE - {computed} signals computed, latest={last_signal['regime_label']} (ensemble={last_signal['ensemble_score']:.3f})")
 
     except Exception as e:
         _analysis_status[symbol] = "error"
