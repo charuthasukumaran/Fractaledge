@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Fractal Stock Analyzer — Main Entry Point
+FractalEdge — Main Entry Point
 ==========================================
 Uses Yahoo Finance (free, no account needed).
 
@@ -98,7 +98,7 @@ def generate_synthetic_candles(days=20, interval_minutes=5, seed=42, base_price=
 def run_demo():
     """Run with synthetic data — full fractal analysis pipeline."""
     logger.info("=" * 55)
-    logger.info("  FRACTAL STOCK ANALYZER - DEMO MODE")
+    logger.info("  FRACTALEDGE - DEMO MODE")
     logger.info("  (Synthetic data, no internet needed)")
     logger.info("=" * 55)
 
@@ -200,7 +200,7 @@ def run_demo():
 def run_live():
     """Run with real NIFTY data from Yahoo Finance."""
     logger.info("=" * 55)
-    logger.info("  FRACTAL STOCK ANALYZER - LIVE MODE")
+    logger.info("  FRACTALEDGE - LIVE MODE")
     logger.info("  (Real NIFTY data via Yahoo Finance)")
     logger.info("=" * 55)
 
@@ -236,7 +236,7 @@ def _start_server():
     """Start the FastAPI server."""
     logger.info("")
     logger.info("=" * 55)
-    logger.info("  Fractal Stock Analyzer Dashboard")
+    logger.info("  FractalEdge Dashboard")
     logger.info("  http://localhost:%d", config.api_port)
     logger.info("=" * 55)
     logger.info("  API Endpoints:")
@@ -255,7 +255,7 @@ def _start_server():
 def run_backtest(args):
     """Run a backtest with the specified strategy and parameters."""
     logger.info("=" * 55)
-    logger.info("  FRACTAL STOCK ANALYZER - BACKTEST MODE")
+    logger.info("  FRACTALEDGE - BACKTEST MODE")
     logger.info("=" * 55)
 
     init_db()
@@ -328,7 +328,7 @@ def run_backtest(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Fractal Stock Analyzer")
+    parser = argparse.ArgumentParser(description="FractalEdge")
     parser.add_argument(
         "command",
         choices=["demo", "live", "backfill", "backtest"],

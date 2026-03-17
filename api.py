@@ -43,7 +43,7 @@ _analysis_status = {}
 _current_data_source = "yahoo"
 
 app = FastAPI(
-    title="Fractal Stock Analyzer API",
+    title="FractalEdge API",
     description="MFDFA/MFDCCA-powered fractal breakout detection with multi-stock support",
     version="2.1.0",
 )

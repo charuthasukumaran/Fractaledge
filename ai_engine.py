@@ -36,7 +36,7 @@ def _get_client():
 
 # ── System Prompts ────────────────────────────────────────────────
 
-INSIGHT_SYSTEM_PROMPT = """You are a friendly market analyst for the Fractal Stock Analyzer app. Your audience is everyday retail traders in India — people who may not know technical jargon.
+INSIGHT_SYSTEM_PROMPT = """You are a friendly market analyst for the FractalEdge app. Your audience is everyday retail traders in India — people who may not know technical jargon.
 
 Your job: Take raw market data and turn it into a DETAILED, CLEAR, and PRESENTABLE analysis report that anyone can understand.
 
@@ -81,7 +81,7 @@ RULES:
 - Use the emoji headers exactly as shown above for consistent formatting
 - Keep each section concise but informative (2-4 sentences each)"""
 
-CHAT_SYSTEM_PROMPT = """You are a friendly AI assistant for the Fractal Stock Analyzer app. You help Indian retail traders understand market conditions using data from the app.
+CHAT_SYSTEM_PROMPT = """You are a friendly AI assistant for the FractalEdge app. You help Indian retail traders understand market conditions using data from the app.
 
 You have access to real-time market data including:
 - Stress scores and regime labels (GREEN = calm, AMBER = caution, RED = high stress)
@@ -281,7 +281,7 @@ def generate_insight(symbol: str = "^NSEI") -> dict:
         return {"insight": None, "error": "AI not configured. Set ANTHROPIC_API_KEY environment variable."}
 
     context = build_market_context(symbol=symbol)
-    prompt = f"""Here is the current market data from the Fractal Stock Analyzer for {symbol}:
+    prompt = f"""Here is the current market data from FractalEdge for {symbol}:
 
 {context}
 
@@ -385,7 +385,7 @@ TRADER'S QUESTION: {user_message}"""
 
 # ── Trade Plan Generator ──────────────────────────────────────────
 
-TRADE_PLAN_SYSTEM_PROMPT = """You are an expert trade plan generator for the Fractal Stock Analyzer app.
+TRADE_PLAN_SYSTEM_PROMPT = """You are an expert trade plan generator for the FractalEdge app.
 Given comprehensive market data, generate a structured trade plan that a retail trader can follow.
 
 FORMAT YOUR RESPONSE EXACTLY LIKE THIS (use markdown):

@@ -107,7 +107,7 @@ def format_telegram_message(alert: dict, symbol: str) -> str:
         "",
         f"\U0001F552 {now}",
         "\U00002500" * 20,
-        "_NIFTY Stress Monitor_",
+        "_FractalEdge_",
     ]
     return "\n".join(lines)
 
@@ -172,7 +172,7 @@ def format_email_html(alert: dict, symbol: str) -> tuple:
     }
     accent, bg, text_dark = colors.get(severity, colors["info"])
 
-    subject = f"[{severity.upper()}] {type_label} - {symbol} | NIFTY Stress Monitor"
+    subject = f"[{severity.upper()}] {type_label} - {symbol} | FractalEdge"
 
     html_body = f"""
     <!DOCTYPE html>
@@ -207,7 +207,7 @@ def format_email_html(alert: dict, symbol: str) -> tuple:
 
         <!-- Footer -->
         <div style="background:#f1f5f9; padding:16px 24px; text-align:center; font-size:12px; color:#94a3b8;">
-          NIFTY Stress Monitor | Fractal Market Analysis
+          FractalEdge | Fractal Market Analysis
         </div>
       </div>
     </body>
@@ -366,7 +366,7 @@ def send_test_notification(channel: str = "all") -> dict:
     test_alert = {
         "type": "test",
         "severity": "info",
-        "message": "This is a test notification from NIFTY Stress Monitor. If you see this, notifications are working correctly!",
+        "message": "This is a test notification from FractalEdge. If you see this, notifications are working correctly!",
     }
     test_symbol = "TEST"
 

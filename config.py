@@ -1,5 +1,5 @@
 """
-Configuration for Fractal Stock Analyzer
+Configuration for FractalEdge
 -----------------------------------------
 Supports Yahoo Finance (free) and Angel One SmartAPI (real-time).
 """

@@ -1,4 +1,4 @@
-# Fractal Stock Analyzer — Dependencies
+# FractalEdge — Dependencies
 fastapi
 uvicorn
 numpy
