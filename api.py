@@ -214,8 +214,16 @@ def _run_analysis_bg(symbol: str, use_source: str):
         window = config.mfdfa.window_size
         ts = all_candles[-1]["timestamp"]
 
+        # Load secondary (NIFTY) candles from DB for MFDCCA coupling (no Yahoo fetch needed)
+        sec_prices = None
+        sec_symbol = "^NSEI" if symbol != "^NSEI" else "^NSEBANK"
+        sec_candles_db = db_get_candles(limit=window, symbol=sec_symbol)
+        if len(sec_candles_db) >= config.mfdfa.min_bars:
+            sec_prices = np.array([c["close"] for c in sec_candles_db])
+            logger.info(f"Analyze {symbol}: using {len(sec_prices)} {sec_symbol} bars from DB for MFDCCA")
+
         try:
-            signal = _compute_full_signal(all_candles, all_close, None, window, ts)
+            signal = _compute_full_signal(all_candles, all_close, sec_prices, window, ts)
             insert_signal(signal, symbol=symbol)
             logger.info(f"Analyze {symbol}: DONE - {signal['regime_label']} (ensemble={signal['ensemble_score']:.3f})")
         except Exception as e:
