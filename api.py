@@ -175,36 +175,35 @@ def _run_analysis_bg(symbol: str, use_source: str):
 
         init_db()
 
-        # Step 1: Fetch candles from selected data source
-        if use_source == "angelone":
-            from angelone_client import AngelOneDataClient, get_api_client, is_angel_symbol, is_logged_in
-            if not is_logged_in():
-                _analysis_status[symbol] = "error"
-                return
-            if not is_angel_symbol(symbol):
-                _analysis_status[symbol] = "error"
-                return
-            client = AngelOneDataClient(symbol=symbol, api_client=get_api_client())
-        else:
-            client = MarketDataClient(symbol=symbol)
-
-        candles = client.get_candles_history(days=30, interval="5m")
-
-        if not candles:
-            _analysis_status[symbol] = "error"
-            return
-
-        upsert_candles(candles, symbol=symbol)
-        logger.info(f"Analyze {symbol}: fetched {len(candles)} candles")
-
-        # Step 2: Fetch secondary for MFDCCA
-        sec_candles = client.get_secondary_candles()
-        all_secondary_prices = None
-        if sec_candles and len(sec_candles) >= config.mfdfa.min_bars:
-            all_secondary_prices = np.array([c["close"] for c in sec_candles])
-
-        # Step 3: Load candles from DB and compute one signal at the latest point
         from database import get_candles as db_get_candles
+
+        # Step 1: Check if DB already has enough candles (skip slow Yahoo fetch)
+        existing = db_get_candles(limit=config.mfdfa.window_size, symbol=symbol)
+
+        if len(existing) < config.mfdfa.min_bars:
+            # Not enough data in DB — must fetch from source
+            if use_source == "angelone":
+                from angelone_client import AngelOneDataClient, get_api_client, is_angel_symbol, is_logged_in
+                if not is_logged_in():
+                    _analysis_status[symbol] = "error"
+                    return
+                if not is_angel_symbol(symbol):
+                    _analysis_status[symbol] = "error"
+                    return
+                client = AngelOneDataClient(symbol=symbol, api_client=get_api_client())
+            else:
+                client = MarketDataClient(symbol=symbol)
+
+            candles = client.get_candles_history(days=30, interval="5m")
+            if not candles:
+                _analysis_status[symbol] = "error"
+                return
+            upsert_candles(candles, symbol=symbol)
+            logger.info(f"Analyze {symbol}: fetched {len(candles)} candles from source")
+        else:
+            logger.info(f"Analyze {symbol}: using {len(existing)} existing candles from DB")
+
+        # Step 2: Load candles from DB and compute one signal
         all_candles = db_get_candles(limit=config.mfdfa.window_size, symbol=symbol)
 
         if len(all_candles) < config.mfdfa.min_bars:
@@ -215,14 +214,8 @@ def _run_analysis_bg(symbol: str, use_source: str):
         window = config.mfdfa.window_size
         ts = all_candles[-1]["timestamp"]
 
-        sec_window = None
-        if all_secondary_prices is not None:
-            sec_end = min(len(all_close), len(all_secondary_prices))
-            if sec_end >= config.mfdfa.min_bars:
-                sec_window = all_secondary_prices[-sec_end:]
-
         try:
-            signal = _compute_full_signal(all_candles, all_close, sec_window, window, ts)
+            signal = _compute_full_signal(all_candles, all_close, None, window, ts)
             insert_signal(signal, symbol=symbol)
             logger.info(f"Analyze {symbol}: DONE - {signal['regime_label']} (ensemble={signal['ensemble_score']:.3f})")
         except Exception as e:
