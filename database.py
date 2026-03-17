@@ -265,9 +265,28 @@ class _PgConnection:
     def __init__(self, conn):
         self._conn = conn
 
+    @staticmethod
+    def _convert_params(params):
+        """Convert numpy types to Python native types for psycopg2."""
+        if params is None:
+            return None
+        import numpy as np
+        converted = []
+        for p in params:
+            if isinstance(p, (np.integer,)):
+                converted.append(int(p))
+            elif isinstance(p, (np.floating,)):
+                converted.append(float(p))
+            elif isinstance(p, np.ndarray):
+                converted.append(p.tolist())
+            else:
+                converted.append(p)
+        return tuple(converted)
+
     def execute(self, query, params=None):
         """Execute a query, converting ? placeholders to %s for PostgreSQL."""
         query = query.replace("?", "%s")
+        params = self._convert_params(params)
         cur = self._conn.cursor(cursor_factory=RealDictCursor)
         cur.execute(query, params)
         return cur
