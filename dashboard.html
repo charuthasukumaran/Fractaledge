@@ -1539,6 +1539,14 @@ async function loadAll() {
     document.getElementById('statusText').textContent = 'Connected';
   }
 
+  // Fetch current price from latest candle
+  try {
+    const cResp = await fetchJSON('/candles?limit=1&' + sp);
+    if (cResp && cResp.candles && cResp.candles.length > 0) {
+      document.getElementById('currentPrice').textContent = cResp.candles[cResp.candles.length - 1].close.toFixed(2);
+    }
+  } catch(e) {}
+
   // Update sidebar badges
   if (analysisData) {
     const bq = analysisData.breakout_quality || {};
