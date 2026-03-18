@@ -56,15 +56,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Agent API Router ──────────────────────────────────────────
+try:
+    from agent_api import agent_router
+    app.include_router(agent_router, prefix="/agents", tags=["agents"])
+except ImportError:
+    pass
+
 
 # ── Dashboard ──────────────────────────────────────────────────
 
 @app.get("/", response_class=FileResponse)
 def dashboard():
+    html_path = Path(__file__).parent / "dashboard-light.html"
+    if html_path.exists():
+        return FileResponse(html_path, media_type="text/html")
+    return JSONResponse({"message": "dashboard-light.html not found."}, status_code=404)
+
+
+@app.get("/dark", response_class=FileResponse)
+def dashboard_dark():
     html_path = Path(__file__).parent / "dashboard.html"
     if html_path.exists():
         return FileResponse(html_path, media_type="text/html")
-    return JSONResponse({"message": "dashboard.html not found."}, status_code=404)
+    return JSONResponse({"message": "dashboard-light.html not found."}, status_code=404)
 
 
 # ── Stock Selection ────────────────────────────────────────────
@@ -160,7 +175,8 @@ def _compute_full_signal(all_candles, close_prices, secondary_prices, window, ti
     features["breakout_quality"] = breakout_quality
     features["risk"] = risk_data
     features["topless_target"] = topless_data
-    signal["features_json"] = json.dumps(features)
+    from feature_engine import _numpy_default
+    signal["features_json"] = json.dumps(features, default=_numpy_default)
 
     return signal
 
@@ -286,6 +302,17 @@ def health():
         "latest_signal_at": latest_signal["timestamp"] if latest_signal else None,
         "current_regime": latest_signal["regime_label"] if latest_signal else None,
     }
+
+
+@app.get("/myip")
+def my_outbound_ip():
+    """Returns the server's actual outbound IP address."""
+    import urllib.request
+    try:
+        ip = urllib.request.urlopen("https://api.ipify.org", timeout=5).read().decode("utf-8")
+        return {"outbound_ip": ip, "note": "Register this IP as Primary Static IP in Angel One SmartAPI"}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 # ── Candles ────────────────────────────────────────────────────────
